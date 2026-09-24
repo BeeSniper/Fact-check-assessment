@@ -8,10 +8,18 @@ Do not use `Math.max/Math.min` to rewrite user input before validation. Pass raw
 
 Validation logic must live in `src/lib/validation.ts` as pure functions returning `string | null` (null = valid, string = error message). This makes rules testable without rendering components, serves as executable documentation via the test file, and prevents the component from becoming a tangle of inline checks. Run `npm test` as a verification gate — not just `npm run build`.
 
-## 3. Pin test framework version to match the build tool
-
-Vitest 5 is incompatible with Vite 5 (breaks on `./module-runner` import). When adding a test framework, verify version compatibility with the existing build tool before installing. Use `vitest@^2` with `vite@^5`. Always run `npm test` after installation to confirm the runner starts, not just after writing test files.
-
-## 4. Use useMemo for derived validation state
+## 3. Use useMemo for derived validation state
 
 When form validation depends on form state, compute errors with `useMemo(() => validateSettings(settings), [settings])` rather than storing errors in a separate `useState` and syncing via `useEffect`. The `useEffect` approach introduces an extra render cycle and a state-sync footgun where errors can lag behind the actual field values.
+
+## 4. Verify AI build summaries against the actual files
+
+An AI's description of its own output ("66 tests," "field-level validation") is not evidence that it exists. Before accepting a generated summary, `WORKFLOW.md`, or `CLAUDE.md`, open the real files and check timestamps, diffs, and function bodies. In this project, an AI-written `WORKFLOW.md` described a two-round comparison that hadn't actually happened — caught by checking file timestamps, not by reading the summary.
+
+## 5. Reference exact file paths and field names when iterating on a feature
+
+A prompt naming a feature by topic alone lets the AI invent a new field set each time, even for "the same feature" on a second pass. Always point to the existing component file and list the fields to preserve. In this project, two generations of the same nominal feature shared zero field names.
+
+## 6. Run `git init` immediately after exporting from a browser AI tool
+
+Branches shown inside a browser-based builder (Bolt, similar tools) don't survive a ZIP export — the downloaded folder has no `.git` until you create one. Initialize git before creating any branches, or a branch-based comparison silently collapses into one unversioned folder.
