@@ -2,27 +2,33 @@
 
 ## Methodology
 
-The same feature — a settings form for a fact-check assessment tool — was built twice from two different prompt styles, each saved to its own git branch:
+The same feature — a fact-check assessment settings form — was built via two prompt styles, each isolated on its own branch after the fact from a single Bolt session:
 
-- **`round-1-vague-prompt`**: "Build a settings form for a fact-check assessment feature." No constraints, no file references, no verification step.
-- **`round-2-precise-prompt`**: Prompt included file references (`FactCheckSettingsForm.tsx`), validation constraints (integer ranges, enum values, domain format rules), example behavior ("disable Save when any field has a validation error"), and an explicit verification step ("write tests, then run them"). Built via an explore-plan-code loop.
+- `round-1-vague-prompt`: "Build a settings form for a fact-check assessment feature." One sentence, no constraints, no file references, no verification step. Fields: claim, source, category, confidence, notes.
+- `round-2-precise-prompt`: generated in the same Bolt session with more elaborate scope than the drill intended — includes a validation module (`validation.ts`), a test suite (`validation.test.ts`), Supabase persistence, and expanded fields (assessment mode, confidence threshold, source verification level, etc). This round was not produced from the specific file-referenced, constraint-driven prompt drafted for this exercise. Bolt's free-tier daily token allowance was exhausted before that prompt could be run, so an earlier, already-generated elaborate build was adopted as the Round 2 comparator instead.
+
+Round 1 and Round 2 also diverged in field set, since both were generated without an enforced continuity constraint. Round 1 covers claim/source/category/confidence/notes; Round 2 covers assessment mode/confidence threshold/source verification/claim limits/language/excluded domains. This means the comparison below is not a pure "same feature, two prompt styles" diff — it also reflects the AI choosing different scope each time it was prompted vaguely-adjacent to the same topic. That divergence is itself a finding: without file references pinning the AI to an existing field set, even a topically similar prompt produces a structurally different feature.
 
 ## Correctness
 
-Round 1 silently clamps invalid input (`Math.max(1, Math.min(500, parseInt(...) || 1))`), meaning out-of-range values are rewritten behind the user's back. If the database already contains dirty data, the form rewrites it on save without ever surfacing the problem. Round 2 passes raw values through and validates them via a pure `validation.ts` module with 66 tests covering boundary values, NaN, empty strings, and invalid domains. The Save button is disabled when any error is present, and invalid fields show red borders with descriptive error messages.
+Round 1 accepts any input, including a fully empty form — tested directly, with every field (claim, source, category, confidence, notes) submitting successfully and showing a fake "saved" alert with no persistence. Round 2 wires `validateSettings()` into a `useMemo` that re-runs on every keystroke, disables Save while any field is invalid (`formHasErrors`), and shows inline errors per field. However, validation strength varies: numeric/enum fields (confidence threshold, claims count, source count) enforce real range and type checks, while `validateDomain()` only checks for a dot and no whitespace — `"a.b"` passes despite not being a real domain.
 
 ## Accessibility
 
-Round 1 has no `aria-invalid` attributes and no programmatic error announcement. Round 2 adds `aria-invalid` to every validated input, displays error text with an icon for screen-reader context, and includes a top-level error banner summarizing the form state. Both rounds use `role="switch"` for toggles, which is correct.
+Round 1 has no accessibility attributes at all — labels aren't linked to inputs via `htmlFor`/`id`. Round 2 adds `aria-invalid` to every validated input and `role="switch"`/`aria-checked` on toggles, but its `FieldError` component renders plain text with no `role="alert"` or `aria-live` region — a sighted user sees the red text instantly, but a screen reader user gets no announcement when an error appears. Partial improvement, not full compliance.
 
 ## Edge Cases
 
-Round 1 handles exactly zero edge cases — the clamping masks them all. Round 2 explicitly handles: NaN from failed `parseInt`, empty/whitespace domain strings, domains containing spaces, duplicate domain entries (prevents adding), and dirty data loaded from Supabase (validated on load via `useMemo`). The test suite documents every edge case as a named test case.
+Round 1 handles none — confirmed by testing: empty submit succeeds, malformed email (`flavyuio@`) and malformed URL (`httpsffr sss`) both save without error. Round 2 catches non-integer/out-of-range numeric input (`!Number.isInteger`, including NaN from a cleared field) and rejects domains with whitespace or no dot — but `validateDomain` would still accept a non-real domain like `"a.b"`, so its edge-case coverage is real but incomplete.
 
 ## Review Effort
 
-Round 1 requires a line-by-line manual review to discover that clamping hides errors, that there are no tests, and that no validation exists. The reviewer must mentally simulate edge cases. Round 2's review is faster: the validation logic lives in one file with a clear API (`string | null` return), the test suite serves as executable documentation of the rules, and the UI changes are mechanical (error display + disabled state). A reviewer can focus on whether the validation rules are correct rather than hunting for missing validation.
+Reverting Round 2's code back to Round 1's baseline deleted 1,107 lines and added 80 — that size difference is itself the review cost: Round 1's correctness could only be judged by manually clicking through and guessing what might break, since there was nothing to read. Round 2's `validation.ts` is a single, isolated module with a consistent return type (`string | null`), so a reviewer can check each rule in isolation rather than hunting through UI code for missing checks.
+
+## AI Mistake Caught
+
+The most significant mistake was not a bug in either build individually, but a scope mismatch across rounds: Round 2 was generated for a different field set than Round 1 (no `claim`, `source`, or `notes` field carried over; new fields like `assessment_mode` and `excluded_domains` appeared instead), which was only caught by manually diffing file contents and timestamps rather than trusting the AI's own summary of what it built. A secondary mistake: Round 2's `validateDomain()` accepts any string containing a dot and no whitespace as a valid domain — `"a.b"` or `"x.y.z.q"` pass, despite not being real domains — a gap only visible by reading the validation source directly, not from the UI or from the AI's description of its own work.
 
 ## Diff Summary
 
-7 files changed, 887 insertions, 111 deletions. New files: `validation.ts`, `validation.test.ts`, `constants.ts`. The component grew by ~150 lines (error display, `useMemo` validation, `FieldError` component) but shrank in complexity per line because inline clamping was removed.
+Reverting `round-2-precise-prompt` back to a bare baseline (`round-1-vague-prompt`) removed `src/lib/validation.ts`, `src/lib/validation.test.ts`, `src/lib/supabase.ts`, `src/types/settings.ts`, and a Supabase migration file — 6 files changed, 80 insertions, 1,107 deletions.
