@@ -23,3 +23,7 @@ A prompt naming a feature by topic alone lets the AI invent a new field set each
 ## 6. Run `git init` immediately after exporting from a browser AI tool
 
 Branches shown inside a browser-based builder (Bolt, similar tools) don't survive a ZIP export — the downloaded folder has no `.git` until you create one. Initialize git before creating any branches, or a branch-based comparison silently collapses into one unversioned folder.
+
+## 7. Verify AI-reported work against ground truth before proceeding
+
+Before starting the next step of any task, check the AI's claim about what it did against the actual evidence — file timestamps, diffs, function bodies, test output — not its written summary. Applies especially when moving between rounds, sessions, or branches: confirm files landed where claimed, changes match what was described, and figures (test counts, line counts) can be independently reproduced. In this project, an AI-written progress report described work that had not happened; it was caught by checking file timestamps, not by reading the report. Testable: for any AI-reported outcome, name the specific file, diff, or command output that confirms it before treating the report as fact.
